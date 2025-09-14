@@ -1,4 +1,3 @@
-Друг, [14.09.2025 17:45]
 import os
 from telegram import (
     Update,
