@@ -1,142 +1,113 @@
 import os
-import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, ContextTypes,
-    ConversationHandler, CallbackQueryHandler, MessageHandler, filters
+from flask import Flask, request
+from telegram import (
+    Update, ReplyKeyboardMarkup, KeyboardButton
 )
-from flask import Flask
-import threading
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, ConversationHandler,
+    filters, ContextTypes
+)
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# --- Константы шагов анкеты ---
+CHOOSING_ROLE, SPECIALTY, RATE, CONTACT = range(4)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = -1002155394225  # id твоего канала
-
-if not BOT_TOKEN:
-    raise ValueError("❌ Установи переменную окружения BOT_TOKEN на Render!")
-
-# Состояния
-ROLE, SPEC, PRICE, CONTACT_W, PLACE, NEED, CONTACT_C = range(7)
-
-# Flask для Render
+# --- Flask-приложение ---
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "Bot is running!"
+# --- Создаём приложение Telegram ---
+TOKEN = os.getenv("BOT_TOKEN")  # токен берётся из переменных окружения на Render
+application = Application.builder().token(TOKEN).build()
 
-# /start
+# --- Команда старт ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("👷 Рабочий", callback_data="worker")],
-        [InlineKeyboardButton("🏗 Подрядчик", callback_data="contractor")]
+        [KeyboardButton("👷 Подрядчик"), KeyboardButton("⚒️ Рабочий")],
+        [KeyboardButton("➕ Другое")]
     ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "Привет! Выбери, кто ты:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "Привет! 👋\nВыберите, кто вы:",
+        reply_markup=reply_markup
     )
-    return ROLE
+    return CHOOSING_ROLE
 
-# Роль
-async def role_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    context.user_data["role"] = query.data
+# --- Выбор роли ---
+async def choose_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["role"] = update.message.text
+    await update.message.reply_text("Укажите вашу специальность:")
+    return SPECIALTY
 
-    if query.data == "worker":
-        await query.edit_message_text("✍️ Введи свою специальность:")
-        return SPEC
-    else:
-        await query.edit_message_text("📍 Где нужны рабочие?")
-        return PLACE
+# --- Ввод специальности ---
+async def get_specialty(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["specialty"] = update.message.text
+    await update.message.reply_text("Укажите вашу ставку:")
+    return RATE
 
-# Рабочий — спец
-async def worker_spec(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["spec"] = update.message.text
-    await update.message.reply_text("💰 Сколько денег просишь (ставка за ед.)?")
-    return PRICE
+# --- Ввод ставки ---
+async def get_rate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["rate"] = update.message.text
+    await update.message.reply_text("Укажите ваш контакт (телефон или Telegram):")
+    return CONTACT
 
-# Рабочий — ставка
-async def worker_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["price"] = update.message.text
-    await update.message.reply_text("📞 Оставь номер или @username:")
-    return CONTACT_W
-
-# Рабочий — контакт
-async def worker_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- Ввод контакта и завершение ---
+async def get_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["contact"] = update.message.text
-    spec = context.user_data["spec"]
-    price = context.user_data["price"]
+
+    role = context.user_data["role"]
+    specialty = context.user_data["specialty"]
+    rate = context.user_data["rate"]
     contact = context.user_data["contact"]
 
     text = (
-        f"✅ Новая анкета:\n\n"
-        f"👷 Рабочий\n"
-        f"🛠 Специальность: {spec}\n"
-        f"💰 Ставка: {price}\n"
+        f"✅ Спасибо! Ваша анкета сохранена.\n\n"
+        f"👷 Роль: {role}\n"
+        f"🛠 Специальность: {specialty}\n"
+        f"💰 Ставка: {rate}\n"
         f"📞 Контакт: {contact}"
     )
-    await update.message.reply_text("Спасибо! Ваша анкета сохранена.")
-    await context.bot.send_message(chat_id=CHANNEL_ID, text=text)
+
+    await update.message.reply_text(text)
+
     return ConversationHandler.END
 
-# Подрядчик — место
-async def contractor_place(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["place"] = update.message.text
-    await update.message.reply_text("👷 Какие рабочие нужны?")
-    return NEED
-
-# Подрядчик — нужные
-async def contractor_need(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["need"] = update.message.text
-    await update.message.reply_text("📞 Оставь номер или @username:")
-    return CONTACT_C
-
-# Подрядчик — контакт
-async def contractor_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["contact"] = update.message.text
-    place = context.user_data["place"]
-    need = context.user_data["need"]
-    contact = context.user_data["contact"]
-
-    text = (
-        f"✅ Новая анкета:\n\n"
-        f"🏗 Подрядчик\n"
-        f"📍 Объект: {place}\n"
-        f"👷 Нужны: {need}\n"
-        f"📞 Контакт: {contact}"
-    )
-    await update.message.reply_text("Спасибо! Ваша анкета сохранена.")
-    await context.bot.send_message(chat_id=CHANNEL_ID, text=text)
-    return ConversationHandler.END
-
-# Отмена
+# --- Отмена ---
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Операция отменена.")
+    await update.message.reply_text("❌ Анкета отменена. Чтобы начать заново, напишите /start")
     return ConversationHandler.END
 
-def run_bot():
-    tg_app = ApplicationBuilder().token(BOT_TOKEN).build()
+# --- Настройка ConversationHandler ---
+conv_handler = ConversationHandler(
+    entry_points=[CommandHandler("start", start)],
+    states={
+        CHOOSING_ROLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_role)],
+        SPECIALTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_specialty)],
+        RATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_rate)],
+        CONTACT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_contact)],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+)
 
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            ROLE: [CallbackQueryHandler(role_chosen)],
-            SPEC: [MessageHandler(filters.TEXT & ~filters.COMMAND, worker_spec)],
-            PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, worker_price)],
-            CONTACT_W: [MessageHandler(filters.TEXT & ~filters.COMMAND, worker_contact)],
-            PLACE: [MessageHandler(filters.TEXT & ~filters.COMMAND, contractor_place)],
-            NEED: [MessageHandler(filters.TEXT & ~filters.COMMAND, contractor_need)],
-            CONTACT_C: [MessageHandler(filters.TEXT & ~filters.COMMAND, contractor_contact)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
+application.add_handler(conv_handler)
 
-    tg_app.add_handler(conv_handler)
-    tg_app.run_polling()
+# --- Flask route для Telegram Webhook ---
+@app.route(f"/{TOKEN}", methods=["POST"])
+async def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    await application.process_update(update)
+    return "ok", 200
 
+# --- Flask healthcheck ---
+@app.route("/")
+def index():
+    return "Бот работает!"
+
+# --- Запуск ---
 if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    port = int(os.environ.get("PORT", 10000))
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path=TOKEN,
+        webhook_url=f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    )
+    app.run(host="0.0.0.0", port=port)
