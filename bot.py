@@ -1,5 +1,7 @@
 import os
 import logging
+import threading
+from flask import Flask
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -126,9 +128,9 @@ async def other(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # ==============================
-# 🔹 Главная функция
+# 🔹 Telegram bot
 # ==============================
-def main():
+def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -150,5 +152,19 @@ def main():
     logger.info("✅ Бот запущен через polling...")
     app.run_polling()
 
+# ==============================
+# 🔹 Flask-заглушка для Render
+# ==============================
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "Bot is running ✅"
+
 if __name__ == "__main__":
-    main()
+    # Запускаем бота в отдельном потоке
+    threading.Thread(target=run_bot).start()
+
+    # Flask сервер для Render
+    port = int(os.environ.get("PORT", 5000))
+    flask_app.run(host="0.0.0.0", port=port)
