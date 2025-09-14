@@ -145,7 +145,7 @@ def webhook():
     return "ok"
 
 
-if name == "__main__":
+if __name__ == "__main__":
     import threading
 
     # Запускаем Telegram-бота в отдельном потоке
