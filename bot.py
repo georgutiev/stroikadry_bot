@@ -124,10 +124,7 @@ conv_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
         CHOOSING_ROLE: [CallbackQueryHandler(choose_role)],
-        CONTRACTOR_STEP1: [MessageHandler(filters.TEXT & ~filters.
-
-Друг, [14.09.2025 17:45]
-COMMAND, contractor_step1)],
+        CONTRACTOR_STEP1: [MessageHandler(filters.TEXT & ~filters.COMMAND, contractor_step1)],
         CONTRACTOR_STEP2: [MessageHandler(filters.TEXT & ~filters.COMMAND, contractor_step2)],
         CONTRACTOR_STEP3: [MessageHandler(filters.TEXT & ~filters.COMMAND, contractor_step3)],
         WORKER_STEP1: [MessageHandler(filters.TEXT & ~filters.COMMAND, worker_step1)],
