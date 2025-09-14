@@ -1,6 +1,6 @@
 
 import os
-from flask import Flask, request
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes,
@@ -23,10 +23,11 @@ ROLE, PLACE, NEED, CONTACT_C, SPEC, PRICE, CONTACT_W = range(7)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🏗 Подрядчик", callback_data="contractor")],
-        [InlineKeyboardButton("⚒ Рабочий", callback_data="worker")]
+        [InlineKeyboardButton("⚒ Рабочий", callback_data="worker")],
+        [InlineKeyboardButton("➕ Другое", callback_data="other")]
     ]
     await update.message.reply_text(
-        "Привет! 👋\nВыберите, кто вы:",
+        "Привет! 👋 Выберите, кто вы:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return ROLE
@@ -41,8 +42,11 @@ async def role_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if role == "contractor":
         await query.edit_message_text("🏗 Укажите место, где нужны рабочие:")
         return PLACE
-    else:
+    elif role == "worker":
         await query.edit_message_text("⚒ Укажите вашу специальность:")
+        return SPEC
+    else:
+        await query.edit_message_text("✍️ Введите, кто вы (например: прораб, заказчик и т.д.):")
         return SPEC
 
 # Подрядчик
